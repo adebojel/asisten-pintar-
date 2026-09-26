@@ -1,0 +1,6 @@
+{
+  "name": "Asisten Kontrol",
+  "description": "Asisten offline cerdas untuk memegang kendali ponsel, mengatur WiFi, data seluler, dan kontrol perangkat secara instan.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

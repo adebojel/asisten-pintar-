@@ -1,46 +1,45 @@
-name: Build Android APK (Fix Exit Code 127)
+name: Build Android APK (Latest)
 
 on:
   push:
     branches: [ "main", "master" ]
-  workflow_dispatch:
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch: # Memungkinkan tombol "Run workflow" manual di GitHub
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-    # 1. Unduh kode sumber proyek
+    # 1. Checkout repositori versi v4 terbaru
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    # 2. Setup JDK 17
-    - name: Set up JDK 17
+    # 2. Setup JDK 21 (Standar Android Gradle Plugin terbaru)
+    - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
-        java-version: '17'
+        java-version: '21'
         distribution: 'temurin'
 
-    # 3. Solusi Exit Code 127: Pasang Gradle bawaan & buat file gradlew jika hilang
-    - name: Setup Gradle & Regenerate Wrapper
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y gradle
-        if [ ! -f "gradlew" ]; then
-          echo "File gradlew tidak ditemukan. Membuat gradlew baru..."
-          gradle wrapper
-        fi
-        chmod +x gradlew
+    # 3. Optimasi Cache Gradle dengan Action resmi terbaru
+    - name: Setup Gradle Cache
+      uses: gradle/actions/setup-gradle@v3
 
-    # 4. Jalankan proses Build
+    # 4. Beri izin eksekusi Gradle Wrapper
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+
+    # 5. Build APK Debug
     - name: Build Debug APK
       run: ./gradlew assembleDebug --no-daemon
 
-    # 5. Unggah file APK hasil kompilasi
+    # 6. Unggah APK ke Artifacts (v4)
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
       with:
-        name: android-app-apk
+        name: android-debug-apk
         path: app/build/outputs/apk/debug/*.apk
-        retention-days: 7
+        retention-days: 7 # Menyimpan file selama 7 hari
         

@@ -1,0 +1,26 @@
+<resources>
+    <string name="app_name">Asisten Kontrol</string>
+    <string name="assistant_title">Kendali HP Offline</string>
+    <string name="tab_controls">Kontrol</string>
+    <string name="tab_assistant">Asisten</string>
+    <string name="tab_apps">Aplikasi</string>
+    <string name="tab_whatsapp">Suara WA</string>
+    <string name="tab_routines">Rutinitas</string>
+    <string name="tab_guide">Panduan</string>
+    <string name="status_connected">Terhubung</string>
+    <string name="status_disconnected">Terputus</string>
+    <string name="wifi_title">Wi-Fi</string>
+    <string name="mobile_data_title">Data Seluler</string>
+    <string name="flashlight_title">Senter</string>
+    <string name="sound_mode_title">Mode Suara</string>
+    <string name="bluetooth_title">Bluetooth</string>
+    <string name="battery_saver_title">Hemat Baterai</string>
+    <string name="airplane_title">Mode Pesawat</string>
+    <string name="accessibility_service_name">Layanan Asisten Kendali HP</string>
+    <string name="accessibility_service_description">Membantu asisten menjalankan perintah cepat sistem seperti panel setelan, kunci layar, dan tangkapan layar.</string>
+    <string name="whatsapp_service_name">Pembaca Suara WhatsApp Offline</string>
+    <string name="bg_service_channel_name">Layanan Asisten Latar Belakang</string>
+    <string name="bg_service_channel_desc">Notifikasi agar asisten tetap aktif setelah HP dimatikan ulang dan berjalan di latar belakang.</string>
+    <string name="bg_notification_title">Asisten Kendali HP Aktif</string>
+    <string name="bg_notification_desc">Mendengarkan WhatsApp &amp; siap menerima perintah offline</string>
+</resources>
