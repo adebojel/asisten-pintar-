@@ -33,7 +33,8 @@ jobs:
 
     # 5. Build APK Debug
     - name: Build Debug APK
-      run: ./gradlew assembleDebug --no-daemon
+      run: ./gradlew git update-index --chmod=+x gradlew
+      
 
     # 6. Unggah APK ke Artifacts (v4)
     - name: Upload Debug APK
@@ -42,4 +43,3 @@ jobs:
         name: android-debug-apk
         path: app/build/outputs/apk/debug/*.apk
         retention-days: 7 # Menyimpan file selama 7 hari
-        
