@@ -263,6 +263,16 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         postDirectAction("Ubah Wi-Fi (${if (enable) "Nyalakan" else "Matikan"})", feedback, "WIFI_TOGGLE")
     }
 
+    fun onToggleBluetooth(enable: Boolean) {
+        val feedback = deviceController.toggleBluetooth(enable)
+        postDirectAction("Ubah Bluetooth (${if (enable) "Nyalakan" else "Matikan"})", feedback, "BLUETOOTH_TOGGLE")
+    }
+
+    fun onToggleMobileData(enable: Boolean) {
+        val feedback = deviceController.handleMobileDataAction(enable)
+        postDirectAction("Ubah Data Seluler (${if (enable) "Nyalakan" else "Matikan"})", feedback, "MOBILE_DATA_TOGGLE")
+    }
+
     fun onOpenInternetPanel() {
         deviceController.openInternetPanel()
         postDirectAction("Panel Internet", "Membuka Panel Koneksi Internet untuk mengatur Wi-Fi dan Data Seluler.", "INTERNET_PANEL")

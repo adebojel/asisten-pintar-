@@ -134,6 +134,14 @@ class OfflineCommandEngine(
         }
 
         // 6. Connectivity Settings
+        if (matchesAny(query, listOf("matikan bluetooth", "nonaktifkan bluetooth", "bluetooth mati", "bluetooth off", "turn off bluetooth"))) {
+            val feedback = deviceController.toggleBluetooth(false)
+            return CommandResult.Success(feedback, "BLUETOOTH_OFF")
+        }
+        if (matchesAny(query, listOf("nyalakan bluetooth", "aktifkan bluetooth", "hidupkan bluetooth", "bluetooth nyala", "bluetooth on", "turn on bluetooth"))) {
+            val feedback = deviceController.toggleBluetooth(true)
+            return CommandResult.Success(feedback, "BLUETOOTH_ON")
+        }
         if (matchesAny(query, listOf("bluetooth", "buka bluetooth", "pengaturan bluetooth"))) {
             deviceController.openBluetoothSettings()
             return CommandResult.ActionPrompt("Membuka setelan Bluetooth.", "BLUETOOTH")

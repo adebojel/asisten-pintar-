@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.control.DeviceStatus
 import com.example.ui.AssistantViewModel
+import com.example.ui.components.ConnectivityDashboardCard
 import com.example.ui.components.StatusHeaderCard
 
 @Composable
@@ -85,7 +86,22 @@ fun QuickControlsScreen(
             )
         }
 
-        // Section: Konektivitas (Wi-Fi & Data)
+        // Dashboard Konektivitas: Saklar Toggle WiFi, Bluetooth, & Data Seluler
+        item {
+            ConnectivityDashboardCard(
+                deviceStatus = deviceStatus,
+                onToggleWifi = { enable -> viewModel.onToggleWifi(enable) },
+                onToggleBluetooth = { enable -> viewModel.onToggleBluetooth(enable) },
+                onToggleMobileData = { enable -> viewModel.onToggleMobileData(enable) },
+                onOpenWifiSettings = { viewModel.onOpenWifiSettings() },
+                onOpenBluetoothSettings = { viewModel.onOpenBluetooth() },
+                onOpenMobileDataSettings = { viewModel.onOpenMobileDataSettings() },
+                onOpenInternetPanel = { viewModel.onOpenInternetPanel() },
+                onRefreshStatus = { viewModel.onRefreshStatus() }
+            )
+        }
+
+        // Section: Pengaturan Nirkabel Lanjutan
         item {
             Text(
                 text = "KONTROL JARINGAN & KONEKSI",

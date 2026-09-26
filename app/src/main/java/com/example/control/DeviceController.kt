@@ -27,6 +27,7 @@ data class DeviceStatus(
     val isWifiEnabled: Boolean = false,
     val isWifiConnected: Boolean = false,
     val isMobileDataConnected: Boolean = false,
+    val isBluetoothEnabled: Boolean = false,
     val isTorchOn: Boolean = false,
     val ringerMode: Int = AudioManager.RINGER_MODE_NORMAL, // 0=SILENT, 1=VIBRATE, 2=NORMAL
     val batteryPercent: Int = 100,
@@ -44,6 +45,8 @@ class DeviceController(private val context: Context) {
     private val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as? CameraManager
     private val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
     private val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+    private val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager
+    private val bluetoothAdapter = bluetoothManager?.adapter ?: @Suppress("DEPRECATION") android.bluetooth.BluetoothAdapter.getDefaultAdapter()
 
     private val _deviceStatus = MutableStateFlow(DeviceStatus())
     val deviceStatus: StateFlow<DeviceStatus> = _deviceStatus.asStateFlow()
@@ -116,10 +119,17 @@ class DeviceController(private val context: Context) {
             100
         }
 
+        val isBtOn = try {
+            bluetoothAdapter?.isEnabled == true
+        } catch (_: Exception) {
+            false
+        }
+
         _deviceStatus.value = _deviceStatus.value.copy(
             isWifiEnabled = isWifiOn,
             isWifiConnected = isWifiConn,
             isMobileDataConnected = isCellularConn,
+            isBluetoothEnabled = isBtOn,
             ringerMode = ringer,
             batteryPercent = batteryPercent,
             isBatterySaverOn = isSaver,
@@ -300,6 +310,41 @@ class DeviceController(private val context: Context) {
             context.startActivity(intent)
         } catch (_: Exception) {
             // Ignored
+        }
+    }
+
+    fun toggleBluetooth(enable: Boolean): String {
+        vibrate()
+        return try {
+            if (bluetoothAdapter == null) {
+                "Bluetooth tidak didukung pada perangkat ini."
+            } else {
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                    @Suppress("DEPRECATION")
+                    val success = if (enable) bluetoothAdapter.enable() else bluetoothAdapter.disable()
+                    refreshStatus()
+                    if (success) {
+                        if (enable) "Bluetooth berhasil diaktifkan." else "Bluetooth berhasil dimatikan."
+                    } else {
+                        openBluetoothSettings()
+                        "Membuka setelan Bluetooth..."
+                    }
+                } else {
+                    // On Android 12+, direct enable/disable requires BLUETOOTH_CONNECT or system intent
+                    openBluetoothSettings()
+                    if (enable) {
+                        "Membuka setelan untuk mengaktifkan Bluetooth."
+                    } else {
+                        "Membuka setelan untuk mematikan Bluetooth."
+                    }
+                }
+            }
+        } catch (e: SecurityException) {
+            openBluetoothSettings()
+            "Izin Bluetooth diperlukan. Membuka pengaturan Bluetooth..."
+        } catch (e: Exception) {
+            openBluetoothSettings()
+            "Membuka setelan Bluetooth..."
         }
     }
 
