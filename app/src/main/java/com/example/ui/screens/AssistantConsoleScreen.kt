@@ -53,6 +53,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.SuggestionChipDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -87,6 +88,7 @@ fun AssistantConsoleScreen(
 
     val wakeName by viewModel.wakeName.collectAsStateWithLifecycle()
     val isVoiceListening by viewModel.isVoiceListening.collectAsStateWithLifecycle()
+    val currentSuggestions by viewModel.currentSuggestions.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
 
     // Auto-scroll on new message
@@ -284,21 +286,24 @@ fun AssistantConsoleScreen(
         }
 
         // Suggestion Chips Carousel
-        LazyRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(sampleSuggestions) { suggestion ->
-                SuggestionChip(
-                    onClick = { viewModel.submitCommand(suggestion) },
-                    label = { Text(suggestion, fontSize = 12.sp) },
-                    colors = SuggestionChipDefaults.suggestionChipColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    ),
-                    modifier = Modifier.testTag("chip_${suggestion.replace(" ", "_")}")
-                )
+        if (currentSuggestions.isNotEmpty()) {
+            LazyRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(currentSuggestions) { suggestion ->
+                    SuggestionChip(
+                        onClick = { viewModel.submitCommand(suggestion) },
+                        label = { Text("👉 $suggestion", fontSize = 12.sp, fontWeight = FontWeight.SemiBold) },
+                        colors = SuggestionChipDefaults.suggestionChipColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                            labelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        ),
+                        modifier = Modifier.testTag("chip_${suggestion.replace(" ", "_")}")
+                    )
+                }
             }
         }
 
@@ -314,7 +319,10 @@ fun AssistantConsoleScreen(
             item { Spacer(modifier = Modifier.height(4.dp)) }
 
             items(messages) { message ->
-                MessageBubble(message = message)
+                MessageBubble(
+                    message = message,
+                    onSuggestionClick = { viewModel.submitCommand(it) }
+                )
             }
 
             item { Spacer(modifier = Modifier.height(8.dp)) }
@@ -517,7 +525,10 @@ fun AssistantConsoleScreen(
 }
 
 @Composable
-private fun MessageBubble(message: ChatMessage) {
+private fun MessageBubble(
+    message: ChatMessage,
+    onSuggestionClick: (String) -> Unit = {}
+) {
     val isUser = message.isUser
     val alignment = if (isUser) Alignment.End else Alignment.Start
 
@@ -543,12 +554,48 @@ private fun MessageBubble(message: ChatMessage) {
                 )
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
-            Text(
-                text = message.text,
-                fontSize = 14.sp,
-                lineHeight = 20.sp,
-                color = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Column {
+                Text(
+                    text = message.text,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    color = if (isUser) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                if (!isUser && !message.followUpQuestion.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
+                    ) {
+                        Text(
+                            text = "❓ ${message.followUpQuestion}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        if (!isUser && message.suggestions.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+            ) {
+                items(message.suggestions) { suggestion ->
+                    SuggestionChip(
+                        onClick = { onSuggestionClick(suggestion) },
+                        label = { Text("👉 $suggestion", fontSize = 11.sp, fontWeight = FontWeight.SemiBold) },
+                        colors = SuggestionChipDefaults.suggestionChipColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        )
+                    )
+                }
+            }
         }
     }
 }

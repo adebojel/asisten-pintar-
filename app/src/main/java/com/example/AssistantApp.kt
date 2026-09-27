@@ -16,7 +16,8 @@ class AssistantApp : Application() {
         val database = AppDatabase.getInstance(this)
         repository = AssistantRepository(
             database.commandLogDao(),
-            database.automationRoutineDao()
+            database.automationRoutineDao(),
+            database.favoriteAppDao()
         )
         CoroutineScope(Dispatchers.IO).launch {
             repository.ensureDefaultRoutines()

@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -26,12 +28,16 @@ import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.FlashlightOff
 import androidx.compose.material.icons.filled.FlashlightOn
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.NetworkCell
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material.icons.filled.Wifi
@@ -45,6 +51,9 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SuggestionChip
+import androidx.compose.material3.SuggestionChipDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -59,18 +68,28 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.control.DeviceStatus
 import com.example.ui.AssistantViewModel
 import com.example.ui.components.ConnectivityDashboardCard
+import com.example.ui.components.QuickAccessGridCard
 import com.example.ui.components.StatusHeaderCard
+import com.example.ui.components.UpdateCenterCard
 
 @Composable
 fun QuickControlsScreen(
     viewModel: AssistantViewModel,
     deviceStatus: DeviceStatus,
     paddingValues: PaddingValues,
-    onNavigateToGuide: () -> Unit
+    onNavigateToGuide: () -> Unit,
+    onNavigateToUpdate: () -> Unit = {}
 ) {
+    val favoriteAppItems by viewModel.favoriteAppItems.collectAsStateWithLifecycle()
+    val installedApps by viewModel.installedApps.collectAsStateWithLifecycle()
+    val isAutoMicEnabled by viewModel.isAutoMicOnLaunchEnabled.collectAsStateWithLifecycle()
+    val isVoiceListening by viewModel.isVoiceListening.collectAsStateWithLifecycle()
+    val updateStatus by viewModel.updateStatus.collectAsStateWithLifecycle()
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -83,6 +102,39 @@ fun QuickControlsScreen(
             StatusHeaderCard(
                 deviceStatus = deviceStatus,
                 onRefresh = { viewModel.onRefreshStatus() }
+            )
+        }
+
+        // Pembaruan Aplikasi Studio
+        item {
+            UpdateCenterCard(
+                currentVersion = "${viewModel.currentVersionName} (${viewModel.currentVersionCode})",
+                updateStatus = updateStatus,
+                onCheckUpdate = { viewModel.checkForUpdates() },
+                onDownloadAndInstall = {
+                    viewModel.downloadAndInstallApk()
+                },
+                onOpenUpdateCenter = onNavigateToUpdate
+            )
+        }
+
+        // Pengaturan Mikrofon Otomatis Saat Buka Aplikasi
+        item {
+            AutoMicControlCard(
+                isAutoMicEnabled = isAutoMicEnabled,
+                isVoiceListening = isVoiceListening,
+                onToggleAutoMic = { viewModel.setAutoMicOnLaunchEnabled(it) }
+            )
+        }
+
+        // Quick Access Grid: Aplikasi favorit satu sentuh
+        item {
+            QuickAccessGridCard(
+                favoriteApps = favoriteAppItems,
+                allInstalledApps = installedApps,
+                onLaunchApp = { app -> viewModel.launchApp(app) },
+                onSaveFavorites = { updated -> viewModel.updateFavorites(updated) },
+                onResetDefaults = { viewModel.resetDefaultFavorites() }
             )
         }
 
@@ -802,6 +854,111 @@ private fun ShortcutItem(
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
+@Composable
+fun AutoMicControlCard(
+    isAutoMicEnabled: Boolean,
+    isVoiceListening: Boolean,
+    onToggleAutoMic: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("auto_mic_control_card"),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isVoiceListening)
+                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+            else
+                MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            if (isVoiceListening)
+                                MaterialTheme.colorScheme.primary
+                            else if (isAutoMicEnabled)
+                                MaterialTheme.colorScheme.primaryContainer
+                            else
+                                MaterialTheme.colorScheme.surfaceVariant
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Mic,
+                        contentDescription = "Mikrofon Otomatis",
+                        tint = if (isVoiceListening)
+                            MaterialTheme.colorScheme.onPrimary
+                        else if (isAutoMicEnabled)
+                            MaterialTheme.colorScheme.primary
+                        else
+                            MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Mikrofon Buka Aplikasi",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        if (isVoiceListening) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.errorContainer
+                            ) {
+                                Text(
+                                    text = "Mendengarkan",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+                    Text(
+                        text = if (isAutoMicEnabled)
+                            "Otomatis aktif mendengarkan perintah seketika aplikasi dibuka"
+                        else
+                            "Dinonaktifkan (perlu tekan ikon mikrofon)",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Switch(
+                checked = isAutoMicEnabled,
+                onCheckedChange = onToggleAutoMic,
+                modifier = Modifier.testTag("auto_mic_setting_switch")
             )
         }
     }

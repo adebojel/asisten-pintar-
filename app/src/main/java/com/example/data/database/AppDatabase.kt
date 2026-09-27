@@ -6,17 +6,20 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import com.example.data.database.dao.AutomationRoutineDao
 import com.example.data.database.dao.CommandLogDao
+import com.example.data.database.dao.FavoriteAppDao
 import com.example.data.database.entity.AutomationRoutineEntity
 import com.example.data.database.entity.CommandLogEntity
+import com.example.data.database.entity.FavoriteAppEntity
 
 @Database(
-    entities = [CommandLogEntity::class, AutomationRoutineEntity::class],
-    version = 1,
+    entities = [CommandLogEntity::class, AutomationRoutineEntity::class, FavoriteAppEntity::class],
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun commandLogDao(): CommandLogDao
     abstract fun automationRoutineDao(): AutomationRoutineDao
+    abstract fun favoriteAppDao(): FavoriteAppDao
 
     companion object {
         @Volatile

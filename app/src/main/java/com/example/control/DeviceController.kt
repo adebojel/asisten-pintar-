@@ -461,6 +461,191 @@ class DeviceController(private val context: Context) {
         }
     }
 
+    // Hands-Free Gestures and App Controls
+    fun scrollDown(): Pair<Boolean, String> {
+        vibrate()
+        val service = AssistantAccessibilityService.instance
+        return if (service != null) {
+            val success = service.scrollDown()
+            if (success) {
+                Pair(true, "Layar berhasil digulir ke bawah.")
+            } else {
+                Pair(false, "Tidak dapat menggulir layar saat ini.")
+            }
+        } else {
+            openAccessibilitySettings()
+            Pair(false, "Aktifkan 'Layanan Asisten Kendali HP' di Aksesibilitas agar asisten dapat menggulir layar.")
+        }
+    }
+
+    fun scrollUp(): Pair<Boolean, String> {
+        vibrate()
+        val service = AssistantAccessibilityService.instance
+        return if (service != null) {
+            val success = service.scrollUp()
+            if (success) {
+                Pair(true, "Layar berhasil digulir ke atas.")
+            } else {
+                Pair(false, "Tidak dapat menggulir layar saat ini.")
+            }
+        } else {
+            openAccessibilitySettings()
+            Pair(false, "Aktifkan 'Layanan Asisten Kendali HP' di Aksesibilitas agar asisten dapat menggulir layar.")
+        }
+    }
+
+    fun typeText(text: String): Pair<Boolean, String> {
+        vibrate()
+        val service = AssistantAccessibilityService.instance
+        return if (service != null) {
+            val success = service.typeText(text)
+            if (success) {
+                Pair(true, "Teks \"$text\" berhasil diketik.")
+            } else {
+                Pair(false, "Tidak menemukan kolom input teks yang aktif di layar.")
+            }
+        } else {
+            openAccessibilitySettings()
+            Pair(false, "Aktifkan 'Layanan Asisten Kendali HP' di Aksesibilitas agar asisten dapat mengetik teks.")
+        }
+    }
+
+    fun clickSendOrSubmit(): Pair<Boolean, String> {
+        vibrate()
+        val service = AssistantAccessibilityService.instance
+        return if (service != null) {
+            val success = service.clickSendOrSubmit()
+            if (success) {
+                Pair(true, "Tombol kirim/cari berhasil ditekan.")
+            } else {
+                Pair(false, "Tidak menemukan tombol kirim atau cari di layar saat ini.")
+            }
+        } else {
+            openAccessibilitySettings()
+            Pair(false, "Aktifkan 'Layanan Asisten Kendali HP' di Aksesibilitas agar asisten dapat menekan tombol.")
+        }
+    }
+
+    fun clickElement(targetText: String): Pair<Boolean, String> {
+        vibrate()
+        val service = AssistantAccessibilityService.instance
+        return if (service != null) {
+            val success = service.clickElementByText(targetText)
+            if (success) {
+                Pair(true, "Berhasil mengklik \"$targetText\".")
+            } else {
+                Pair(false, "Tidak menemukan elemen atau tombol dengan teks \"$targetText\".")
+            }
+        } else {
+            openAccessibilitySettings()
+            Pair(false, "Aktifkan 'Layanan Asisten Kendali HP' di Aksesibilitas untuk mengklik elemen layar.")
+        }
+    }
+
+    fun goBack(): Pair<Boolean, String> {
+        vibrate()
+        val service = AssistantAccessibilityService.instance
+        return if (service != null) {
+            val success = service.performBack()
+            if (success) Pair(true, "Kembali ke layar sebelumnya.") else Pair(false, "Gagal kembali.")
+        } else {
+            openAccessibilitySettings()
+            Pair(false, "Aktifkan 'Layanan Asisten Kendali HP' di Aksesibilitas.")
+        }
+    }
+
+    fun goHome(): Pair<Boolean, String> {
+        vibrate()
+        val service = AssistantAccessibilityService.instance
+        return if (service != null) {
+            val success = service.performHome()
+            if (success) Pair(true, "Membuka layar utama / beranda.") else Pair(false, "Gagal membuka beranda.")
+        } else {
+            openAccessibilitySettings()
+            Pair(false, "Aktifkan 'Layanan Asisten Kendali HP' di Aksesibilitas.")
+        }
+    }
+
+    fun openRecents(): Pair<Boolean, String> {
+        vibrate()
+        val service = AssistantAccessibilityService.instance
+        return if (service != null) {
+            val success = service.performRecents()
+            if (success) Pair(true, "Membuka daftar aplikasi terakhir.") else Pair(false, "Gagal membuka riwayat aplikasi.")
+        } else {
+            openAccessibilitySettings()
+            Pair(false, "Aktifkan 'Layanan Asisten Kendali HP' di Aksesibilitas.")
+        }
+    }
+
+    fun openNotifications(): Pair<Boolean, String> {
+        vibrate()
+        val service = AssistantAccessibilityService.instance
+        return if (service != null) {
+            val success = service.performNotifications()
+            if (success) Pair(true, "Membuka panel notifikasi.") else Pair(false, "Gagal membuka panel notifikasi.")
+        } else {
+            openAccessibilitySettings()
+            Pair(false, "Aktifkan 'Layanan Asisten Kendali HP' di Aksesibilitas.")
+        }
+    }
+
+    fun searchYouTube(query: String): Pair<Boolean, String> {
+        vibrate()
+        val encoded = android.net.Uri.encode(query)
+        val appIntent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("vnd.youtube://results?search_query=$encoded")).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        val webIntent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://www.youtube.com/results?search_query=$encoded")).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+
+        return try {
+            context.startActivity(appIntent)
+            Pair(true, "Membuka YouTube dan mencari \"$query\".")
+        } catch (_: Exception) {
+            try {
+                context.startActivity(webIntent)
+                Pair(true, "Membuka pencarian YouTube untuk \"$query\".")
+            } catch (_: Exception) {
+                Pair(false, "Tidak dapat membuka aplikasi YouTube.")
+            }
+        }
+    }
+
+    fun sendWhatsAppDirect(phoneOrName: String, message: String): Pair<Boolean, String> {
+        vibrate()
+        val cleanNumber = phoneOrName.replace(Regex("[^0-9]"), "")
+        val encodedMsg = android.net.Uri.encode(message)
+        val uriStr = if (cleanNumber.length >= 7) {
+            val formatted = if (cleanNumber.startsWith("0")) "62" + cleanNumber.substring(1) else cleanNumber
+            "https://api.whatsapp.com/send?phone=$formatted&text=$encodedMsg"
+        } else {
+            "https://api.whatsapp.com/send?text=$encodedMsg"
+        }
+
+        val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(uriStr)).apply {
+            setPackage("com.whatsapp")
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+
+        return try {
+            context.startActivity(intent)
+            Pair(true, "Membuka obrolan WhatsApp dengan pesan siap kirim.")
+        } catch (_: Exception) {
+            // Fallback without package restriction
+            try {
+                val fallbackIntent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(uriStr)).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                context.startActivity(fallbackIntent)
+                Pair(true, "Membuka WhatsApp untuk mengirim pesan.")
+            } catch (_: Exception) {
+                Pair(false, "Aplikasi WhatsApp tidak terpasang di perangkat.")
+            }
+        }
+    }
+
     private fun vibrate() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {

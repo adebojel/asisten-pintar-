@@ -13,6 +13,7 @@ import java.util.Locale
 
 class VoiceActivationManager(
     private val context: Context,
+    private val onSpeechStarted: (() -> Unit)? = null,
     private val onResult: (String) -> Unit,
     private val onError: (String) -> Unit
 ) {
@@ -30,17 +31,30 @@ class VoiceActivationManager(
         }
 
         stopListening()
+        onSpeechStarted?.invoke()
 
         try {
             speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
                 setRecognitionListener(object : RecognitionListener {
                     override fun onReadyForSpeech(params: Bundle?) {
                         _isListening.value = true
+                        onSpeechStarted?.invoke()
                     }
 
-                    override fun onBeginningOfSpeech() {}
-                    override fun onRmsChanged(rmsdB: Float) {}
-                    override fun onBufferReceived(buffer: ByteArray?) {}
+                    override fun onBeginningOfSpeech() {
+                        onSpeechStarted?.invoke()
+                    }
+
+                    override fun onRmsChanged(rmsdB: Float) {
+                        if (rmsdB > 1.2f) {
+                            onSpeechStarted?.invoke()
+                        }
+                    }
+
+                    override fun onBufferReceived(buffer: ByteArray?) {
+                        onSpeechStarted?.invoke()
+                    }
+
                     override fun onEndOfSpeech() {
                         _isListening.value = false
                     }
@@ -59,6 +73,7 @@ class VoiceActivationManager(
 
                     override fun onResults(results: Bundle?) {
                         _isListening.value = false
+                        onSpeechStarted?.invoke()
                         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         val spokenText = matches?.firstOrNull()?.trim() ?: ""
                         if (spokenText.isNotEmpty()) {
@@ -68,6 +83,7 @@ class VoiceActivationManager(
                     }
 
                     override fun onPartialResults(partialResults: Bundle?) {
+                        onSpeechStarted?.invoke()
                         val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         matches?.firstOrNull()?.let {
                             _lastRecognizedText.value = it
@@ -85,6 +101,7 @@ class VoiceActivationManager(
                 putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, "id-ID")
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
             }
 
             speechRecognizer?.startListening(intent)

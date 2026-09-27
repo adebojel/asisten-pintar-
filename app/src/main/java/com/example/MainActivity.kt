@@ -1,32 +1,44 @@
 package com.example
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.AutoMode
 import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.MicNone
 import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SmartToy
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -36,10 +48,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -49,8 +63,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.AssistantViewModel
+import com.example.ui.components.ActiveVoiceListeningBanner
+import com.example.ui.screens.AppUpdateScreen
 import com.example.ui.screens.AppsScreen
 import com.example.ui.screens.AssistantConsoleScreen
 import com.example.ui.screens.LogsScreen
@@ -99,6 +116,7 @@ class MainActivity : ComponentActivity() {
                 var currentTab by rememberSaveable {
                     mutableStateOf(if (isAssistLaunch) MainTab.ASSISTANT else MainTab.CONTROLS)
                 }
+                var showUpdateScreen by rememberSaveable { mutableStateOf(false) }
 
                 // If launched via Assist or New Intent, switch tab
                 androidx.compose.runtime.LaunchedEffect(requestedTab.value) {
@@ -117,10 +135,40 @@ class MainActivity : ComponentActivity() {
                 val isReadCallers by viewModel.isReadWhatsAppCallers.collectAsStateWithLifecycle()
                 val isTtsEnabled by viewModel.isTtsEnabled.collectAsStateWithLifecycle()
                 val installedApps by viewModel.installedApps.collectAsStateWithLifecycle()
+                val isAutoMicEnabled by viewModel.isAutoMicOnLaunchEnabled.collectAsStateWithLifecycle()
+                val isVoiceListening by viewModel.isVoiceListening.collectAsStateWithLifecycle()
+                val recognizedVoiceText by viewModel.recognizedVoiceText.collectAsStateWithLifecycle()
 
-                // Support BackHandler to return to Controls tab if on secondary tab
-                BackHandler(enabled = currentTab != MainTab.CONTROLS) {
-                    currentTab = MainTab.CONTROLS
+                val audioPermissionLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.RequestPermission()
+                ) { isGranted ->
+                    if (isGranted) {
+                        viewModel.startVoiceListening()
+                    }
+                }
+
+                // Otomatis aktifkan mikrofon saat aplikasi dibuka jika preferensi aktif
+                LaunchedEffect(Unit) {
+                    if (viewModel.isAutoMicOnLaunchEnabled.value) {
+                        val hasPermission = ContextCompat.checkSelfPermission(
+                            this@MainActivity,
+                            Manifest.permission.RECORD_AUDIO
+                        ) == PackageManager.PERMISSION_GRANTED
+                        if (hasPermission) {
+                            viewModel.startVoiceListening()
+                        } else {
+                            audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                        }
+                    }
+                }
+
+                // Support BackHandler to return to Controls tab or close update screen
+                BackHandler(enabled = showUpdateScreen || currentTab != MainTab.CONTROLS) {
+                    if (showUpdateScreen) {
+                        showUpdateScreen = false
+                    } else {
+                        currentTab = MainTab.CONTROLS
+                    }
                 }
 
                 Scaffold(
@@ -140,6 +188,42 @@ class MainActivity : ComponentActivity() {
                                 titleContentColor = MaterialTheme.colorScheme.onBackground
                             ),
                             actions = {
+                                IconButton(
+                                    onClick = { showUpdateScreen = true },
+                                    modifier = Modifier.testTag("topbar_update_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CloudSync,
+                                        contentDescription = "Pembaruan Studio",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = {
+                                        if (isVoiceListening) {
+                                            viewModel.stopVoiceListening()
+                                        } else {
+                                            val hasPermission = ContextCompat.checkSelfPermission(
+                                                this@MainActivity,
+                                                Manifest.permission.RECORD_AUDIO
+                                            ) == PackageManager.PERMISSION_GRANTED
+                                            if (hasPermission) {
+                                                viewModel.startVoiceListening()
+                                            } else {
+                                                audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.testTag("topbar_mic_toggle_button")
+                                ) {
+                                    Icon(
+                                        imageVector = if (isVoiceListening) Icons.Default.Mic else Icons.Default.MicNone,
+                                        contentDescription = if (isVoiceListening) "Hentikan Mikrofon" else "Mulai Bicara",
+                                        tint = if (isVoiceListening) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
                                 Box(
                                     modifier = Modifier
                                         .padding(end = 12.dp)
@@ -208,52 +292,76 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 ) { innerPadding ->
-                    when (currentTab) {
-                        MainTab.CONTROLS -> {
-                            QuickControlsScreen(
-                                viewModel = viewModel,
-                                deviceStatus = deviceStatus,
-                                paddingValues = innerPadding,
-                                onNavigateToGuide = { currentTab = MainTab.GUIDE }
-                            )
-                        }
-                        MainTab.ASSISTANT -> {
-                            AssistantConsoleScreen(
-                                viewModel = viewModel,
-                                messages = messages,
-                                isTtsEnabled = isTtsEnabled,
-                                paddingValues = innerPadding
-                            )
-                        }
-                        MainTab.APPS -> {
-                            AppsScreen(
-                                viewModel = viewModel,
-                                apps = installedApps,
-                                paddingValues = innerPadding
-                            )
-                        }
-                        MainTab.WHATSAPP -> {
-                            WhatsAppVoiceAssistantScreen(
-                                viewModel = viewModel,
-                                alerts = whatsappAlerts,
-                                isReadMessages = isReadMessages,
-                                isReadCallers = isReadCallers,
-                                paddingValues = innerPadding
-                            )
-                        }
-                        MainTab.ROUTINES -> {
-                            RoutinesScreen(
-                                viewModel = viewModel,
-                                routines = routines,
-                                paddingValues = innerPadding
-                            )
-                        }
-                        MainTab.GUIDE -> {
-                            PermissionsGuideScreen(
-                                viewModel = viewModel,
-                                deviceStatus = deviceStatus,
-                                paddingValues = innerPadding
-                            )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(innerPadding)
+                    ) {
+                        ActiveVoiceListeningBanner(
+                            isListening = isVoiceListening,
+                            recognizedText = recognizedVoiceText,
+                            onStopListening = { viewModel.stopVoiceListening() },
+                            onOpenAssistantTab = { currentTab = MainTab.ASSISTANT }
+                        )
+
+                        Box(modifier = Modifier.weight(1f)) {
+                            if (showUpdateScreen) {
+                                AppUpdateScreen(
+                                    viewModel = viewModel,
+                                    paddingValues = PaddingValues(0.dp),
+                                    onNavigateBack = { showUpdateScreen = false }
+                                )
+                            } else {
+                                when (currentTab) {
+                                    MainTab.CONTROLS -> {
+                                        QuickControlsScreen(
+                                            viewModel = viewModel,
+                                            deviceStatus = deviceStatus,
+                                            paddingValues = PaddingValues(0.dp),
+                                            onNavigateToGuide = { currentTab = MainTab.GUIDE },
+                                            onNavigateToUpdate = { showUpdateScreen = true }
+                                        )
+                                    }
+                                    MainTab.ASSISTANT -> {
+                                        AssistantConsoleScreen(
+                                            viewModel = viewModel,
+                                            messages = messages,
+                                            isTtsEnabled = isTtsEnabled,
+                                            paddingValues = PaddingValues(0.dp)
+                                        )
+                                    }
+                                    MainTab.APPS -> {
+                                        AppsScreen(
+                                            viewModel = viewModel,
+                                            apps = installedApps,
+                                            paddingValues = PaddingValues(0.dp)
+                                        )
+                                    }
+                                    MainTab.WHATSAPP -> {
+                                        WhatsAppVoiceAssistantScreen(
+                                            viewModel = viewModel,
+                                            alerts = whatsappAlerts,
+                                            isReadMessages = isReadMessages,
+                                            isReadCallers = isReadCallers,
+                                            paddingValues = PaddingValues(0.dp)
+                                        )
+                                    }
+                                    MainTab.ROUTINES -> {
+                                        RoutinesScreen(
+                                            viewModel = viewModel,
+                                            routines = routines,
+                                            paddingValues = PaddingValues(0.dp)
+                                        )
+                                    }
+                                    MainTab.GUIDE -> {
+                                        PermissionsGuideScreen(
+                                            viewModel = viewModel,
+                                            deviceStatus = deviceStatus,
+                                            paddingValues = PaddingValues(0.dp)
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }

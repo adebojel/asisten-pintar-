@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -24,6 +25,8 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Launch
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SmartToy
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -41,11 +44,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.control.AppItem
+import com.example.control.toBitmapOrNull
 import com.example.ui.AssistantViewModel
 import java.util.Locale
 
@@ -55,6 +61,7 @@ fun AppsScreen(
     apps: List<AppItem>,
     paddingValues: PaddingValues
 ) {
+    val favoriteApps by viewModel.favoriteApps.collectAsStateWithLifecycle()
     var searchQuery by remember { mutableStateOf("") }
 
     val filteredApps = if (searchQuery.isBlank()) {
@@ -196,6 +203,9 @@ fun AppsScreen(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(filteredApps) { appItem ->
+                    val isFav = favoriteApps.any { it.packageName == appItem.packageName }
+                    val iconBitmap = remember(appItem.icon) { appItem.icon?.toBitmapOrNull() }
+
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -221,12 +231,20 @@ fun AppsScreen(
                                     .background(MaterialTheme.colorScheme.surfaceVariant),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Apps,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(24.dp)
-                                )
+                                if (iconBitmap != null) {
+                                    Image(
+                                        bitmap = iconBitmap.asImageBitmap(),
+                                        contentDescription = appItem.name,
+                                        modifier = Modifier.size(34.dp)
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Apps,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
                             }
 
                             Spacer(modifier = Modifier.width(12.dp))
@@ -246,10 +264,21 @@ fun AppsScreen(
                                 )
                             }
 
+                            IconButton(
+                                onClick = { viewModel.toggleFavorite(appItem) },
+                                modifier = Modifier.testTag("star_${appItem.packageName}")
+                            ) {
+                                Icon(
+                                    imageVector = if (isFav) Icons.Default.Star else Icons.Outlined.StarBorder,
+                                    contentDescription = if (isFav) "Hapus dari Akses Cepat" else "Tambah ke Akses Cepat",
+                                    tint = if (isFav) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
                             Button(
                                 onClick = { viewModel.launchApp(appItem) },
                                 shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.padding(start = 6.dp)
+                                modifier = Modifier.padding(start = 2.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Launch,

@@ -19,14 +19,21 @@ import com.example.control.NetworkStateMonitor
 import com.example.control.NetworkStatus
 import com.example.data.database.entity.AutomationRoutineEntity
 import com.example.data.database.entity.CommandLogEntity
+import com.example.data.database.entity.FavoriteAppEntity
 import com.example.parser.CommandResult
 import com.example.parser.OfflineCommandEngine
+import android.speech.tts.UtteranceProgressListener
+import com.example.control.AssistantCoordinator
 import com.example.service.AssistantForegroundService
+import com.example.service.FloatingAssistantService
+import com.example.update.AppUpdateManager
+import com.example.update.UpdateStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -36,7 +43,17 @@ data class ChatMessage(
     val isUser: Boolean,
     val text: String,
     val actionType: String? = null,
+    val followUpQuestion: String? = null,
+    val suggestions: List<String> = emptyList(),
     val timestamp: Long = System.currentTimeMillis()
+)
+
+private data class CommandExecInfo(
+    val message: String,
+    val actionType: String,
+    val isSuccess: Boolean,
+    val followUp: String,
+    val suggestions: List<String>
 )
 
 class AssistantViewModel(application: Application) : AndroidViewModel(application) {
@@ -53,12 +70,133 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     val voiceActivationManager = com.example.control.VoiceActivationManager(
         context = application,
+        onSpeechStarted = {
+            stopSpeaking()
+        },
         onResult = { spokenText ->
+            stopSpeaking()
             submitCommand(spokenText)
         },
         onError = { _ -> }
     )
     val isVoiceListening: StateFlow<Boolean> = voiceActivationManager.isListening
+    val recognizedVoiceText: StateFlow<String> = voiceActivationManager.lastRecognizedText
+
+    private val assistantPrefs = application.getSharedPreferences("assistant_prefs", Context.MODE_PRIVATE)
+    private val _isAutoMicOnLaunchEnabled = MutableStateFlow(
+        assistantPrefs.getBoolean("auto_mic_on_launch", true)
+    )
+    val isAutoMicOnLaunchEnabled: StateFlow<Boolean> = _isAutoMicOnLaunchEnabled.asStateFlow()
+
+    private val _currentSuggestions = MutableStateFlow<List<String>>(
+        listOf("Gulir ke Bawah", "Buka YouTube", "Buka WhatsApp", "Nyalakan Senter")
+    )
+    val currentSuggestions: StateFlow<List<String>> = _currentSuggestions.asStateFlow()
+
+    private val _currentFollowUpQuestion = MutableStateFlow<String>(
+        "Langkah selanjutnya apa yang ingin Anda lakukan?"
+    )
+    val currentFollowUpQuestion: StateFlow<String> = _currentFollowUpQuestion.asStateFlow()
+
+    private val _isFloatingOverlayEnabled = MutableStateFlow(
+        assistantPrefs.getBoolean("floating_overlay_enabled", false)
+    )
+    val isFloatingOverlayEnabled: StateFlow<Boolean> = _isFloatingOverlayEnabled.asStateFlow()
+    val isFloatingServiceRunning: StateFlow<Boolean> = AssistantCoordinator.isFloatingServiceRunning
+
+    fun canDrawOverlays(): Boolean {
+        return FloatingAssistantService.isOverlayPermissionGranted(getApplication())
+    }
+
+    fun openOverlayPermissionSettings() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val intent = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                android.net.Uri.parse("package:${getApplication<Application>().packageName}")
+            ).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            try {
+                getApplication<Application>().startActivity(intent)
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun setFloatingOverlayEnabled(enabled: Boolean) {
+        _isFloatingOverlayEnabled.value = enabled
+        assistantPrefs.edit().putBoolean("floating_overlay_enabled", enabled).apply()
+        val context = getApplication<Application>()
+        val intent = Intent(context, FloatingAssistantService::class.java)
+        if (enabled) {
+            if (canDrawOverlays()) {
+                context.startService(intent)
+            } else {
+                openOverlayPermissionSettings()
+            }
+        } else {
+            context.stopService(intent)
+        }
+    }
+
+    val appUpdateManager = AppUpdateManager(application)
+    val updateStatus: StateFlow<UpdateStatus> = appUpdateManager.updateStatus
+    val customApkUrl: StateFlow<String> = appUpdateManager.customApkUrl
+    val isAutoCheckUpdateEnabled: StateFlow<Boolean> = appUpdateManager.isAutoCheckEnabled
+    val currentVersionName: String = appUpdateManager.currentVersionName
+    val currentVersionCode: Long = appUpdateManager.currentVersionCode
+
+    fun checkForUpdates(onFinished: ((UpdateStatus) -> Unit)? = null) {
+        appUpdateManager.checkForUpdates(viewModelScope, onFinished)
+    }
+
+    fun downloadAndInstallApk(url: String? = null) {
+        val downloadUrl = if (!url.isNullOrBlank()) url
+        else if (appUpdateManager.customApkUrl.value.isNotBlank()) appUpdateManager.customApkUrl.value
+        else appUpdateManager.studioSharedUrl
+
+        appUpdateManager.downloadAndInstallApk(downloadUrl, viewModelScope)
+    }
+
+    fun setCustomApkUrl(url: String) {
+        appUpdateManager.setCustomApkUrl(url)
+    }
+
+    fun setAutoCheckUpdateEnabled(enabled: Boolean) {
+        appUpdateManager.setAutoCheckEnabled(enabled)
+    }
+
+    fun openStudioLive(useSharedUrl: Boolean = false) {
+        appUpdateManager.openStudioInBrowser(useSharedUrl)
+    }
+
+    fun openInstallPermissionSettings() {
+        appUpdateManager.openInstallPermissionSettings()
+    }
+
+    fun canRequestPackageInstalls(): Boolean {
+        return appUpdateManager.canRequestPackageInstalls()
+    }
+
+    fun resetUpdateStatus() {
+        appUpdateManager.resetStatus()
+    }
+
+    fun setAutoMicOnLaunchEnabled(enabled: Boolean) {
+        _isAutoMicOnLaunchEnabled.value = enabled
+        assistantPrefs.edit().putBoolean("auto_mic_on_launch", enabled).apply()
+        val msg = if (enabled) {
+            "Mikrofon otomatis saat aplikasi dibuka diaktifkan."
+        } else {
+            "Mikrofon otomatis saat aplikasi dibuka dinonaktifkan."
+        }
+        postDirectAction("Pengaturan Mic", msg, "AUTO_MIC_SETTING")
+    }
+
+    fun stopSpeaking() {
+        try {
+            tts?.stop()
+        } catch (_: Exception) {}
+    }
 
     fun setWakeName(name: String) {
         wakeWordManager.setWakeName(name)
@@ -71,6 +209,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun startVoiceListening() {
+        stopSpeaking()
         voiceActivationManager.startListening()
     }
 
@@ -122,6 +261,30 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     private val _installedApps = MutableStateFlow<List<AppItem>>(emptyList())
     val installedApps: StateFlow<List<AppItem>> = _installedApps.asStateFlow()
 
+    val favoriteApps: StateFlow<List<FavoriteAppEntity>> = repository.favoriteApps.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+
+    val favoriteAppItems: StateFlow<List<AppItem>> = combine(
+        repository.favoriteApps,
+        _installedApps
+    ) { favorites, installed ->
+        val installedMap = installed.associateBy { it.packageName }
+        favorites.map { fav ->
+            installedMap[fav.packageName] ?: AppItem(
+                name = fav.name,
+                packageName = fav.packageName,
+                icon = null
+            )
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = emptyList()
+    )
+
     val isForegroundServiceRunning: StateFlow<Boolean> = AssistantForegroundService.isRunning
 
     private val _messages = MutableStateFlow<List<ChatMessage>>(
@@ -139,17 +302,80 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     private var tts: TextToSpeech? = null
     private var isTtsReady = false
+    private var onSpeechDoneCallback: (() -> Unit)? = null
 
     init {
         initTts(application)
         loadInstalledApps()
         startBackgroundService()
+        if (appUpdateManager.isAutoCheckEnabled.value) {
+            checkForUpdates()
+        }
+
+        // Connect AssistantCoordinator for Floating Overlay
+        AssistantCoordinator.onFloatingMicClicked = {
+            if (isVoiceListening.value) {
+                stopVoiceListening()
+            } else {
+                startVoiceListening()
+            }
+        }
+        AssistantCoordinator.onFloatingActionSubmitted = { actionCmd ->
+            submitCommand(actionCmd)
+        }
+
+        // Sync listening state to Floating Overlay
+        viewModelScope.launch {
+            isVoiceListening.collect { listening ->
+                AssistantCoordinator.setListening(listening)
+            }
+        }
+
+        // Start floating overlay if previously enabled
+        if (_isFloatingOverlayEnabled.value && canDrawOverlays()) {
+            try {
+                val intent = Intent(application, FloatingAssistantService::class.java)
+                application.startService(intent)
+            } catch (_: Exception) {}
+        }
     }
 
     fun loadInstalledApps() {
         viewModelScope.launch(Dispatchers.IO) {
             val apps = appManager.getInstalledApps()
             _installedApps.value = apps
+            repository.ensureDefaultFavorites(apps)
+        }
+    }
+
+    fun toggleFavorite(appItem: AppItem) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val isNowFav = repository.toggleFavorite(appItem.packageName, appItem.name)
+            val msg = if (isNowFav) {
+                "${appItem.name} ditambahkan ke Akses Cepat"
+            } else {
+                "${appItem.name} dihapus dari Akses Cepat"
+            }
+            postDirectAction("Akses Cepat", msg, "FAVORITE_TOGGLE")
+        }
+    }
+
+    fun removeFavorite(packageName: String) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.removeFavorite(packageName)
+        }
+    }
+
+    fun updateFavorites(selectedApps: List<AppItem>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.setFavorites(selectedApps)
+            postDirectAction("Akses Cepat", "${selectedApps.size} aplikasi disimpan ke Akses Cepat", "FAVORITE_SAVED")
+        }
+    }
+
+    fun resetDefaultFavorites() {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.ensureDefaultFavorites(_installedApps.value)
         }
     }
 
@@ -204,6 +430,28 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
                     tts?.setLanguage(Locale.ENGLISH)
                 }
                 isTtsReady = true
+
+                tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) {
+                        AssistantCoordinator.setListening(false)
+                    }
+
+                    override fun onDone(utteranceId: String?) {
+                        viewModelScope.launch(Dispatchers.Main) {
+                            val cb = onSpeechDoneCallback
+                            onSpeechDoneCallback = null
+                            cb?.invoke()
+                        }
+                    }
+
+                    override fun onError(utteranceId: String?) {
+                        viewModelScope.launch(Dispatchers.Main) {
+                            val cb = onSpeechDoneCallback
+                            onSpeechDoneCallback = null
+                            cb?.invoke()
+                        }
+                    }
+                })
             }
         }
     }
@@ -215,15 +463,22 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    private fun speak(text: String) {
+    private fun speak(text: String, onDone: (() -> Unit)? = null) {
         if (_isTtsEnabled.value && isTtsReady) {
-            // Strip bullet points or technical markup for clean voice
+            onSpeechDoneCallback = onDone
             val cleanText = text.replace("•", "").replace("\n", ". ")
-            tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, "assistant_speech")
+            val uId = "speech_${System.currentTimeMillis()}"
+            tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, uId)
+        } else {
+            viewModelScope.launch(Dispatchers.Main) {
+                kotlinx.coroutines.delay(600)
+                onDone?.invoke()
+            }
         }
     }
 
     fun submitCommand(input: String) {
+        stopSpeaking()
         val trimmed = input.trim()
         if (trimmed.isEmpty()) return
 
@@ -231,28 +486,74 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
         _messages.value = _messages.value + userMsg
 
         val result = commandEngine.executeCommand(trimmed)
-        val (responseMsg, actionType, isSuccess) = when (result) {
-            is CommandResult.Success -> Triple(result.message, result.actionType, true)
-            is CommandResult.ActionPrompt -> Triple(result.message, result.actionType, true)
-            is CommandResult.Unknown -> Triple(result.message, "UNKNOWN", false)
+        val execInfo = when (result) {
+            is CommandResult.Success -> CommandExecInfo(
+                result.message,
+                result.actionType,
+                true,
+                result.followUpQuestion,
+                result.suggestions
+            )
+            is CommandResult.ActionPrompt -> CommandExecInfo(
+                result.message,
+                result.actionType,
+                true,
+                result.followUpQuestion,
+                result.suggestions
+            )
+            is CommandResult.Unknown -> CommandExecInfo(
+                result.message,
+                "UNKNOWN",
+                false,
+                "Perintah tidak dikenali. Pilih salah satu:",
+                result.suggestions
+            )
         }
+
+        _currentFollowUpQuestion.value = execInfo.followUp
+        _currentSuggestions.value = execInfo.suggestions
+        AssistantCoordinator.updateStatus(execInfo.message, execInfo.followUp, execInfo.suggestions)
 
         val botMsg = ChatMessage(
             isUser = false,
-            text = responseMsg,
-            actionType = actionType
+            text = execInfo.message,
+            actionType = execInfo.actionType,
+            followUpQuestion = execInfo.followUp,
+            suggestions = execInfo.suggestions
         )
         _messages.value = _messages.value + botMsg
 
-        speak(responseMsg)
+        val fullSpeech = if (execInfo.followUp.isNotBlank() && execInfo.actionType != "STOP_SPEECH" && execInfo.actionType != "LOCK_SCREEN") {
+            "${execInfo.message}. ${execInfo.followUp}"
+        } else {
+            execInfo.message
+        }
+
+        if (execInfo.actionType == "STOP_SPEECH") {
+            stopSpeaking()
+        } else if (execInfo.actionType == "APP_UPDATE") {
+            speak(fullSpeech) {
+                if (execInfo.actionType != "LOCK_SCREEN") {
+                    startVoiceListening()
+                }
+            }
+            checkForUpdates()
+        } else {
+            // Speak confirmation & question, then immediately re-activate listening!
+            speak(fullSpeech) {
+                if (execInfo.actionType != "LOCK_SCREEN") {
+                    startVoiceListening()
+                }
+            }
+        }
         deviceController.refreshStatus()
 
         viewModelScope.launch {
             repository.logCommand(
                 query = trimmed,
-                response = responseMsg,
-                actionType = actionType,
-                isSuccess = isSuccess
+                response = execInfo.message,
+                actionType = execInfo.actionType,
+                isSuccess = execInfo.isSuccess
             )
         }
     }

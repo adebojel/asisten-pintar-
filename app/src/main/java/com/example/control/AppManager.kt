@@ -3,6 +3,9 @@ package com.example.control
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.provider.MediaStore
@@ -13,6 +16,23 @@ data class AppItem(
     val packageName: String,
     val icon: Drawable? = null
 )
+
+fun Drawable.toBitmapOrNull(): Bitmap? {
+    return try {
+        if (this is BitmapDrawable && this.bitmap != null && !this.bitmap.isRecycled) {
+            return this.bitmap
+        }
+        val width = if (intrinsicWidth > 0) intrinsicWidth else 128
+        val height = if (intrinsicHeight > 0) intrinsicHeight else 128
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        setBounds(0, 0, canvas.width, canvas.height)
+        draw(canvas)
+        bitmap
+    } catch (_: Exception) {
+        null
+    }
+}
 
 class AppManager(private val context: Context) {
     private val packageManager: PackageManager = context.packageManager
